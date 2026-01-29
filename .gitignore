@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# 报告目录（可选，如果不想上传报告）
+# reports/
+
+# 临时文件
+*.tmp
+*.log
