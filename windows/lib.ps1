@@ -502,6 +502,69 @@ function Upload-File {
 # 验证函数
 # ============================================================
 
+# ============================================================
+# 远程内存监控函数
+# ============================================================
+
+# 获取远程 icewhale-files 服务内存占用
+# 方案: 通过 SMB 读取远程机器上的内存信息文件
+# 需要在远程机器上运行:
+#   while true; do ps -o rss= -p $(systemctl show icewhale-files -p MainPID --value) 2>/dev/null | awk '{printf "%.2f", $1/1024}' > /tmp/icewhale_memory.txt; sleep 1; done &
+# 或者使用 cron 定时任务
+#
+# 参数: DriveLetter - 已挂载的 SMB 驱动器盘符 (可选)
+# 返回: 内存占用 (MB)，失败返回 "-"
+function Get-RemoteMemory {
+    param(
+        [string]$DriveLetter = ""
+    )
+
+    # 方法1: 如果提供了驱动器盘符，尝试从 SMB 共享读取内存文件
+    if ($DriveLetter) {
+        $memoryFile = Join-Path "$DriveLetter\" ".icewhale_memory.txt"
+        if (Test-Path -LiteralPath $memoryFile) {
+            try {
+                $content = Get-Content -LiteralPath $memoryFile -Raw -ErrorAction Stop
+                $memory = $content.Trim()
+                if ($memory -match '^\d+\.\d+$') {
+                    return $memory
+                }
+            } catch {}
+        }
+    }
+
+    # 方法2: 尝试使用 plink (PuTTY 命令行工具，如果已安装)
+    $plinkPath = Get-Command plink -ErrorAction SilentlyContinue
+    if ($plinkPath) {
+        $sshCommand = 'ps -o rss= -p $(systemctl show icewhale-files -p MainPID --value) 2>/dev/null | awk ''{printf "%.2f", $1/1024}'''
+        try {
+            $result = echo y | & plink -ssh -batch -pw $SMB_PASSWORD "${SMB_USER}@${SMB_HOST}" $sshCommand 2>$null
+            $memory = $result | Select-String -Pattern '^\d+\.\d+$' | Select-Object -Last 1
+            if ($memory) {
+                return $memory.ToString().Trim()
+            }
+        } catch {}
+    }
+
+    # 方法3: 尝试使用 OpenSSH (如果配置了密钥认证)
+    $sshPath = Get-Command ssh -ErrorAction SilentlyContinue
+    if ($sshPath) {
+        $sshCommand = 'ps -o rss= -p $(systemctl show icewhale-files -p MainPID --value) 2>/dev/null | awk ''{printf "%.2f", $1/1024}'''
+        try {
+            $result = & ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes "${SMB_USER}@${SMB_HOST}" $sshCommand 2>$null
+            if ($LASTEXITCODE -eq 0 -and $result) {
+                $memory = $result | Select-String -Pattern '^\d+\.\d+$' | Select-Object -Last 1
+                if ($memory) {
+                    return $memory.ToString().Trim()
+                }
+            }
+        } catch {}
+    }
+
+    # 如果都失败，返回 "-"
+    return "-"
+}
+
 function Verify-Upload {
     param(
         [string]$LocalPath,

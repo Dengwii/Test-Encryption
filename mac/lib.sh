@@ -388,6 +388,44 @@ verify_upload() {
     fi
 }
 
+# 获取远程 icewhale-files 服务内存占用
+# 参数: $1 - SSH 主机 (可选，默认使用 SMB_HOST)
+#       $2 - SSH 用户 (可选，默认 casaos)
+#       $3 - SSH 密码 (可选，默认 casaos)
+# 输出: 内存占用 (MB)，失败返回 "-"
+get_remote_memory() {
+    local host="${1:-$SMB_HOST}"
+    local user="${2:-casaos}"
+    local pass="${3:-casaos}"
+
+    local tmp_script=$(mktemp)
+    cat > "$tmp_script" <<'EXPECT_SCRIPT'
+log_user 1
+set timeout 10
+set host [lindex $argv 0]
+set user [lindex $argv 1]
+set pass [lindex $argv 2]
+spawn ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 $user@$host {ps -o rss= -p $(systemctl show icewhale-files -p MainPID --value) 2>/dev/null | awk '{printf "%.2f", $1/1024}'}
+expect {
+    "*password*" { send "$pass\r"; exp_continue }
+    eof
+}
+EXPECT_SCRIPT
+
+    local result
+    result=$(expect "$tmp_script" "$host" "$user" "$pass" 2>/dev/null)
+    rm -f "$tmp_script"
+
+    # 提取数字结果
+    result=$(echo "$result" | grep -oE '[0-9]+\.[0-9]+' | tail -1)
+
+    if [[ -n "$result" && "$result" != "0.00" ]]; then
+        echo "$result"
+    else
+        echo "-"
+    fi
+}
+
 # 验证文件完整性
 # 参数: $1 - 文件路径
 # 返回: 0 完好，1 损坏

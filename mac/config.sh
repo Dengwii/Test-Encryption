@@ -7,7 +7,7 @@
 SMB_HOST="10.0.0.72"
 SMB_USER="casaos"
 SMB_PASSWORD="casaos"
-SMB_SHARE="HDD-Storage123/3211/alpha118/mac"
+SMB_SHARE="HDD-Storage123/3211/alpha119/mac"
 
 # ========== 测试文件配置 ==========
 
@@ -22,7 +22,7 @@ UPLOAD_METHOD="applescript"
 UPLOAD_MODE="batch"
 
 # 上传次数: 同一个样本集重复上传的次数
-UPLOAD_ROUNDS=50
+UPLOAD_ROUNDS=1
 
 # 每轮上传前是否删除之前上传的文件
 # - true  : 每轮上传前先删除远程已存在的同名文件/目录
@@ -41,8 +41,8 @@ REPORT_DIR="./reports"
 # 测试 1: 基础上传测试的文件列表
 # 支持：单文件路径、多个文件路径、目录路径（保留目录结构）
 UPLOAD_FILES=(
-    "/Users/zimaos/Downloads/测试样本集mac"
-    # "/path/to/file2.pdf"
+    # "/Users/zimaos/Downloads/测试样本集mac"
+    "/Users/zimaos/Downloads/43"
     # "/path/to/some_directory"    # 目录会自动展开
 )
 

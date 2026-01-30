@@ -139,7 +139,6 @@ EOF
 
 finalize_report() {
     cat >> "$HTML_FILE" <<EOF
-</table>
 <p style='margin-top:20px;color:#666;'>报告生成时间: $(date '+%Y-%m-%d %H:%M:%S')</p>
 </body></html>
 EOF
@@ -270,11 +269,22 @@ run_multi_round_test() {
     local tmp_dir=$(mktemp -d)
     local test_timestamp=$(date +"%Y%m%d_%H%M%S")
 
+    # 内存监控数据: MEMORY_DATA[round]="before|after" (before 仅第一轮有值)
+    typeset -A MEMORY_DATA
+    local baseline_memory="-"
+
     for ((round=1; round<=UPLOAD_ROUNDS; round++)); do
         echo ""
         echo "========================================"
         echo "第 $round 轮上传 (共 $UPLOAD_ROUNDS 轮)"
         echo "========================================"
+
+        # 第一轮上传前采集基准内存
+        if [[ $round -eq 1 ]]; then
+            info "采集上传前内存..."
+            baseline_memory=$(get_remote_memory)
+            info "icewhale-files 基准内存: ${baseline_memory} MB"
+        fi
 
         if ! mount_smb; then
             error "挂载失败，跳过本轮"
@@ -337,6 +347,12 @@ run_multi_round_test() {
         done
 
         umount_smb "$mount_point"
+
+        # 采集本轮上传后的内存
+        info "采集上传后内存..."
+        local after_memory=$(get_remote_memory)
+        MEMORY_DATA[$round]="$after_memory"
+        info "icewhale-files 当前内存: ${after_memory} MB"
 
         if [[ $round -lt $UPLOAD_ROUNDS ]]; then
             info "等待 2 秒后开始下一轮..."
@@ -593,6 +609,54 @@ run_multi_round_test() {
             echo "$csv_line" >> "$CSV_FILE"
             echo "$html_line</tr>" >> "$HTML_FILE"
         fi
+    done
+
+    # ============================================================
+    # 添加内存监控区块到 HTML
+    # ============================================================
+    cat >> "$HTML_FILE" <<EOF
+</table>
+
+<h2>内存监控</h2>
+<div class='stats'>
+<p><strong>监控服务:</strong> icewhale-files</p>
+<p><strong>基准内存 (第1轮上传前):</strong> ${baseline_memory} MB</p>
+<table class='data' style='margin-top:10px;'>
+<tr><th>轮次</th><th>上传后内存 (MB)</th><th>相比基准变化</th></tr>
+EOF
+
+    for ((i=1; i<=UPLOAD_ROUNDS; i++)); do
+        local mem="${MEMORY_DATA[$i]:-"-"}"
+        local change="-"
+        if [[ "$mem" != "-" && "$baseline_memory" != "-" ]]; then
+            change=$(echo "scale=2; $mem - $baseline_memory" | bc)
+            if [[ $(echo "$change >= 0" | bc) -eq 1 ]]; then
+                change="+${change}"
+            fi
+        fi
+        echo "<tr><td>第 ${i} 轮</td><td>${mem}</td><td>${change} MB</td></tr>" >> "$HTML_FILE"
+    done
+
+    echo "</table></div>" >> "$HTML_FILE"
+
+    # ============================================================
+    # 添加内存数据到 CSV 下方
+    # ============================================================
+    echo "" >> "$CSV_FILE"
+    echo "# ============================================================" >> "$CSV_FILE"
+    echo "# 内存监控 (icewhale-files 服务)" >> "$CSV_FILE"
+    echo "# ============================================================" >> "$CSV_FILE"
+    echo "# 基准内存 (第1轮上传前): ${baseline_memory} MB" >> "$CSV_FILE"
+    echo "#" >> "$CSV_FILE"
+    echo "轮次,上传后内存(MB),相比基准变化(MB)" >> "$CSV_FILE"
+
+    for ((i=1; i<=UPLOAD_ROUNDS; i++)); do
+        local mem="${MEMORY_DATA[$i]:-"-"}"
+        local change="-"
+        if [[ "$mem" != "-" && "$baseline_memory" != "-" ]]; then
+            change=$(echo "scale=2; $mem - $baseline_memory" | bc)
+        fi
+        echo "第${i}轮,${mem},${change}" >> "$CSV_FILE"
     done
 
     finalize_report

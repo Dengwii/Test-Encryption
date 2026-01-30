@@ -145,13 +145,63 @@ function Write-ReportHeader {
 }
 
 function Finalize-Report {
+    # 添加内存监控区块到 HTML
+    $memoryHtml = @"
+</table>
+
+<h2>内存监控</h2>
+<div class='stats'>
+<p><strong>监控服务:</strong> icewhale-files</p>
+<p><strong>基准内存 (第1轮上传前):</strong> $($script:BaselineMemory) MB</p>
+<table class='data' style='margin-top:10px;'>
+<tr><th>轮次</th><th>上传后内存 (MB)</th><th>相比基准变化</th></tr>
+"@
+
+    for ($i = 1; $i -le $UPLOAD_ROUNDS; $i++) {
+        $mem = if ($script:MemoryData[$i]) { $script:MemoryData[$i] } else { "-" }
+        $change = "-"
+        if ($mem -ne "-" -and $script:BaselineMemory -ne "-") {
+            try {
+                $changeVal = [double]$mem - [double]$script:BaselineMemory
+                $change = if ($changeVal -ge 0) { "+{0:F2}" -f $changeVal } else { "{0:F2}" -f $changeVal }
+            } catch {}
+        }
+        $memoryHtml += "<tr><td>第 $i 轮</td><td>$mem</td><td>$change MB</td></tr>`r`n"
+    }
+
+    $memoryHtml += "</table></div>"
+
     # HTML 结尾
     $htmlFoot = @"
-</table>
+$memoryHtml
 <p style='margin-top:20px;color:#666;'>报告生成时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
 </body></html>
 "@
     $htmlFoot | Out-File -FilePath $HtmlFile -Append -Encoding utf8
+
+    # 添加内存数据到 CSV 下方
+    $csvMemory = @()
+    $csvMemory += ""
+    $csvMemory += "# ============================================================"
+    $csvMemory += "# 内存监控 (icewhale-files 服务)"
+    $csvMemory += "# ============================================================"
+    $csvMemory += "# 基准内存 (第1轮上传前): $($script:BaselineMemory) MB"
+    $csvMemory += "#"
+    $csvMemory += "轮次,上传后内存(MB),相比基准变化(MB)"
+
+    for ($i = 1; $i -le $UPLOAD_ROUNDS; $i++) {
+        $mem = if ($script:MemoryData[$i]) { $script:MemoryData[$i] } else { "-" }
+        $change = "-"
+        if ($mem -ne "-" -and $script:BaselineMemory -ne "-") {
+            try {
+                $change = [double]$mem - [double]$script:BaselineMemory
+                $change = "{0:F2}" -f $change
+            } catch {}
+        }
+        $csvMemory += "第${i}轮,$mem,$change"
+    }
+
+    $csvMemory -join "`r`n" | Out-File -FilePath $CsvFile -Append -Encoding utf8
 }
 
 # ============================================================
@@ -227,6 +277,10 @@ function Run-MultiRoundTest {
     # 生成本次测试的时间戳前缀 (用于独立文件夹命名)
     $testTimestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
+    # 内存监控数据
+    $script:MemoryData = @{}
+    $script:BaselineMemory = "-"
+
     for ($round = 1; $round -le $UPLOAD_ROUNDS; $round++) {
         Write-Host ""
         Write-Host "========================================"
@@ -247,6 +301,13 @@ function Run-MultiRoundTest {
                 }
             }
             continue
+        }
+
+        # 第一轮上传前采集基准内存
+        if ($round -eq 1) {
+            Write-Info "采集上传前内存..."
+            $script:BaselineMemory = Get-RemoteMemory -DriveLetter $driveLetter
+            Write-Info "icewhale-files 基准内存: $($script:BaselineMemory) MB"
         }
 
         # 确定本轮的上传目标路径
@@ -291,6 +352,12 @@ function Run-MultiRoundTest {
                 Write-Error2 "$itemName - 校验失败"
             }
         }
+
+        # 采集本轮上传后的内存 (在断开连接前)
+        Write-Info "采集上传后内存..."
+        $afterMemory = Get-RemoteMemory -DriveLetter $driveLetter
+        $script:MemoryData[$round] = $afterMemory
+        Write-Info "icewhale-files 当前内存: $afterMemory MB"
 
         # 断开连接
         Disconnect-SMB -DriveLetter $driveLetter
