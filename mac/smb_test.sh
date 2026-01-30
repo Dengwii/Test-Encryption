@@ -29,11 +29,11 @@ write_report_header() {
     local file_count=$4
 
     # 计算错误率
-    local error_rate=0
-    local pass_rate=0
+    local error_rate="0"
+    local pass_rate="0"
     if [[ $total_tests -gt 0 ]]; then
-        pass_rate=$(echo "scale=2; $pass_tests * 100 / $total_tests" | bc)
-        error_rate=$(echo "scale=2; $fail_tests * 100 / $total_tests" | bc)
+        pass_rate=$(printf "%.2f" $(echo "scale=4; $pass_tests * 100 / $total_tests" | bc))
+        error_rate=$(printf "%.2f" $(echo "scale=4; $fail_tests * 100 / $total_tests" | bc))
     fi
 
     # 配置信息
@@ -218,7 +218,7 @@ upload_and_verify_single() {
     elif [[ -d "$item" ]]; then
         # 目录: 逐个文件验证，结果写入 details 文件
         local details_file="${result_file}.details"
-        > "$details_file"
+        touch "$details_file"
 
         local fail_count=0
         local total_count=0
@@ -248,14 +248,14 @@ upload_and_verify_single() {
             echo "${rel_path}|${f}|${remote_file}|${local_md5}|${remote_md5}|${matched}|${f_size_bytes}" >> "$details_file"
         done
 
-        local status="pass"
+        local verify_status="pass"
         local md5_display="$first_md5"
         if [[ $fail_count -gt 0 ]]; then
-            status="fail"
+            verify_status="fail"
             md5_display="${fail_count}/${total_count}不匹配"
         fi
 
-        echo "${remote_size}|${remote_size_bytes}|${md5_display}|${status}|true|${details_file}" > "$result_file"
+        echo "${remote_size}|${remote_size_bytes}|${md5_display}|${verify_status}|true|${details_file}" > "$result_file"
     fi
 }
 
@@ -319,15 +319,14 @@ run_multi_round_test() {
             # 读取并显示结果
             if [[ -f "$result_file" ]]; then
                 local result_line=$(head -1 "$result_file")
-                local result_status="${result_line##*|}"
-                # 去掉末尾的 details 部分来获取 status
                 # 格式: size_human|size_bytes|md5|status|is_dir|details_file
-                local IFS='|'
-                local parts=($result_line)
-                unset IFS
+                # 使用 zsh 的分割语法
+                local parts=("${(@s:|:)result_line}")
+                local r_size="${parts[1]}"
+                local r_md5="${parts[3]}"
                 local r_status="${parts[4]}"
 
-                info "结果: ${parts[1]}|${parts[3]}|${r_status}"
+                info "结果: ${r_size}|${r_md5}|${r_status}"
 
                 if [[ "$r_status" == "pass" ]]; then
                     success "$itemname - 校验通过"
@@ -363,9 +362,7 @@ run_multi_round_test() {
         local first_line=""
         [[ -f "$first_result_file" ]] && first_line=$(head -1 "$first_result_file")
 
-        local IFS='|'
-        local first_parts=($first_line)
-        unset IFS
+        local first_parts=("${(@s:|:)first_line}")
         local is_dir="${first_parts[5]}"
         local first_details="${first_parts[6]}"
 
@@ -377,9 +374,7 @@ run_multi_round_test() {
                     local rf="$tmp_dir/${itemname}_${round}"
                     local rl=""
                     [[ -f "$rf" ]] && rl=$(head -1 "$rf")
-                    local IFS='|'
-                    local rp=($rl)
-                    unset IFS
+                    local rp=("${(@s:|:)rl}")
                     local r_details="${rp[6]}"
 
                     local d_matched="false"
@@ -407,9 +402,7 @@ run_multi_round_test() {
                 local rf="$tmp_dir/${itemname}_${round}"
                 local rl=""
                 [[ -f "$rf" ]] && rl=$(head -1 "$rf")
-                local IFS='|'
-                local rp=($rl)
-                unset IFS
+                local rp=("${(@s:|:)rl}")
                 local r_status="${rp[4]:-fail}"
 
                 ((total_tests++))
@@ -434,9 +427,7 @@ run_multi_round_test() {
         local first_line=""
         [[ -f "$first_result_file" ]] && first_line=$(head -1 "$first_result_file")
 
-        local IFS='|'
-        local first_parts=($first_line)
-        unset IFS
+        local first_parts=("${(@s:|:)first_line}")
         local is_dir="${first_parts[5]}"
         local first_details="${first_parts[6]}"
 
@@ -449,9 +440,7 @@ run_multi_round_test() {
                 local rf="$tmp_dir/${itemname}_${round}"
                 local rl=""
                 [[ -f "$rf" ]] && rl=$(head -1 "$rf")
-                local IFS='|'
-                local rp=($rl)
-                unset IFS
+                local rp=("${(@s:|:)rl}")
                 local r_size="${rp[1]:-未知}"
                 local r_size_bytes="${rp[2]:-0}"
                 local r_status="${rp[4]:-fail}"
@@ -499,9 +488,7 @@ run_multi_round_test() {
                     local rf="$tmp_dir/${itemname}_${round}"
                     local rl=""
                     [[ -f "$rf" ]] && rl=$(head -1 "$rf")
-                    local IFS='|'
-                    local rp=($rl)
-                    unset IFS
+                    local rp=("${(@s:|:)rl}")
                     local r_details="${rp[6]}"
 
                     # 从该轮 details 中找到对应文件
@@ -578,9 +565,7 @@ run_multi_round_test() {
                 local rl=""
                 [[ -f "$rf" ]] && rl=$(head -1 "$rf")
 
-                local IFS='|'
-                local rp=($rl)
-                unset IFS
+                local rp=("${(@s:|:)rl}")
                 local r_size="${rp[1]:-未知}"
                 local r_size_bytes="${rp[2]:-0}"
                 local r_md5="${rp[3]:-未知}"
@@ -632,9 +617,7 @@ run_multi_round_test() {
                 local rf="$tmp_dir/${itemname}_${round}"
                 [[ ! -f "$rf" ]] && continue
                 local rl=$(head -1 "$rf")
-                local IFS='|'
-                local rp=($rl)
-                unset IFS
+                local rp=("${(@s:|:)rl}")
                 local r_status="${rp[4]}"
                 local r_is_dir="${rp[5]}"
                 local r_details="${rp[6]}"
