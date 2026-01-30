@@ -24,6 +24,17 @@ UPLOAD_MODE="batch"
 # 上传次数: 同一个样本集重复上传的次数
 UPLOAD_ROUNDS=3
 
+# 每轮上传前是否删除之前上传的文件
+# - true  : 每轮上传前先删除远程已存在的同名文件/目录
+# - false : 保留之前的文件，直接覆盖上传
+DELETE_BEFORE_UPLOAD=false
+
+# 每轮上传是否使用独立文件夹
+# - true  : 每轮上传到 timestamp_round_1/, timestamp_round_2/ 等独立文件夹，保留所有轮次的文件
+# - false : 所有轮次上传到同一位置
+# 注意: 启用此选项时，DELETE_BEFORE_UPLOAD 仅删除当前轮次文件夹内的文件
+SEPARATE_ROUND_FOLDERS=true
+
 # 测试报告输出目录
 REPORT_DIR="./reports"
 

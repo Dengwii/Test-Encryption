@@ -5,7 +5,7 @@
 $SMB_HOST = "10.0.0.72"
 $SMB_USER = "casaos"
 $SMB_PASSWORD = "casaos"
-$SMB_SHARE = "HDD-Storage123/test1123"
+$SMB_SHARE = "HDD-Storage123/3211/alpha118/win"
 
 # 完整的 UNC 路径 (会自动生成)
 $SMB_PATH = "\\$SMB_HOST\$($SMB_SHARE -replace '/', '\')"
@@ -19,7 +19,18 @@ $SMB_PATH = "\\$SMB_HOST\$($SMB_SHARE -replace '/', '\')"
 $UPLOAD_METHOD = "shell"
 
 # 上传次数: 同一个样本集重复上传的次数
-$UPLOAD_ROUNDS = 3
+$UPLOAD_ROUNDS = 2
+
+# 每轮上传前是否删除之前上传的文件
+# - $true  : 每轮上传前先删除远程已存在的同名文件/目录
+# - $false : 保留之前的文件，直接覆盖上传
+$DELETE_BEFORE_UPLOAD = $false
+
+# 每轮上传是否使用独立文件夹
+# - $true  : 每轮上传到 round_1/, round_2/ 等独立文件夹，保留所有轮次的文件
+# - $false : 所有轮次上传到同一位置
+# 注意: 启用此选项时，$DELETE_BEFORE_UPLOAD 仅删除当前轮次文件夹内的文件
+$SEPARATE_ROUND_FOLDERS = $true
 
 # 测试报告输出目录
 $REPORT_DIR = ".\reports"
@@ -27,6 +38,7 @@ $REPORT_DIR = ".\reports"
 # 测试文件列表
 # 支持：单文件路径、目录路径
 $UPLOAD_FILES = @(
+    "D:\Downloads\Beyond_Compare_5.0.2.30045_64bit_Green\BCompare"
     # "C:\Users\YourName\Downloads\test.zip"
     # "C:\Users\YourName\Documents\testfolder"
 )
